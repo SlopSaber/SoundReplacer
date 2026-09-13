@@ -28,11 +28,23 @@ namespace SoundReplacer.Patches
             _soundLoader.Unload(SoundType.Menu);
         }
 
-        [AffinityPatch(typeof(SongPreviewPlayer), nameof(SongPreviewPlayer.Start))]
+        [AffinityPatch(typeof(SongPreviewPlayer), "Awake")]
         [AffinityPrefix]
         private void ReplaceMenuMusic()
         {
-            // Replace the default menu music on start.
+            ApplyMenuMusic();
+        }
+
+        [AffinityPatch(typeof(SongPreviewPlayer), nameof(SongPreviewPlayer.CrossfadeToDefault))]
+        [AffinityPrefix]
+        private void ReplaceMenuMusicOnDefault()
+        {
+            ApplyMenuMusic();
+        }
+
+        private void ApplyMenuMusic()
+        {
+            // Replace the default menu music before the default crossfade.
             _songPreviewPlayer._defaultAudioClip = _config.MenuMusic switch
             {
                 SoundLoader.NoSoundID => SoundLoader.Empty,

@@ -74,7 +74,6 @@ namespace SoundReplacer.UI
             set
             {
                 _config.MenuMusic = value;
-                _songPreviewPlayer.Start();
                 _songPreviewPlayer.CrossfadeToDefault();
             }
         }
