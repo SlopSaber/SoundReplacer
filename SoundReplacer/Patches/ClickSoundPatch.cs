@@ -6,21 +6,19 @@ namespace SoundReplacer.Patches
 {
     internal class ClickSoundPatch : IAffinity, IDisposable
     {
-        private readonly SoundLoader _soundLoader;
-        private readonly PluginConfig _config;
+        private readonly SoundLoader.Handle _sound;
 
         private readonly AudioClip[] _clickSounds = new AudioClip[1];
         private AudioClip[]? _originalClickSounds;
 
-        private ClickSoundPatch(SoundLoader soundLoader, PluginConfig config)
+        private ClickSoundPatch(SoundLoader soundLoader)
         {
-            _soundLoader = soundLoader;
-            _config = config;
+            _sound = soundLoader.CreateHandle(SoundType.Click);
         }
 
         public void Dispose()
         {
-            _soundLoader.Unload(SoundType.Click);
+            _sound.Dispose();
         }
 
         [AffinityPatch(typeof(BasicUIAudioManager), nameof(BasicUIAudioManager.Start))]
@@ -29,20 +27,12 @@ namespace SoundReplacer.Patches
         {
             _originalClickSounds ??= __instance._clickSounds;
 
-            if (_config.ClickSound == SoundLoader.NoSoundID)
+            _sound.Load((clip, _) =>
             {
-                _clickSounds[0] = SoundLoader.Empty;
-                __instance._clickSounds = _clickSounds;
-            }
-            else if (_config.ClickSound == SoundLoader.DefaultSoundID)
-            {
-                __instance._clickSounds = _originalClickSounds;
-            }
-            else
-            {
-                _clickSounds[0] = _soundLoader.Load(_clickSounds[0], SoundType.Click);
-                __instance._clickSounds = _clickSounds;
-            }
+                if (__instance == null) return;
+                _clickSounds[0] = clip!;
+                __instance._clickSounds = clip == null ? _originalClickSounds : _clickSounds;
+            });
         }
     }
 }

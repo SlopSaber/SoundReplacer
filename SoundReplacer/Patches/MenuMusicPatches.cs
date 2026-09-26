@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using SiraUtil.Affinity;
 using UnityEngine;
 
@@ -8,24 +9,27 @@ namespace SoundReplacer.Patches
     {
         private readonly SongPreviewPlayer _songPreviewPlayer;
         private readonly SoundLoader _soundLoader;
-        private readonly PluginConfig _config;
+        private readonly SoundLoader.Handle _sound;
+        private readonly HashSet<Action> _playbackReleases = new();
+        private bool _wantsDefaultMusic = true;
 
         private readonly AudioClip _originalMenuMusic;
         private readonly AudioClip _originalLobbyMusic;
         private AudioClip? _menuMusic;
 
-        private MenuMusicPatches(SongPreviewPlayer songPreviewPlayer, GameServerLobbyFlowCoordinator lobbyFlowCoordinator, SoundLoader soundLoader, PluginConfig config)
+        private MenuMusicPatches(SongPreviewPlayer songPreviewPlayer, GameServerLobbyFlowCoordinator lobbyFlowCoordinator, SoundLoader soundLoader)
         {
             _songPreviewPlayer = songPreviewPlayer;
             _soundLoader = soundLoader;
-            _config = config;
+            _sound = soundLoader.CreateHandle(SoundType.Menu);
             _originalMenuMusic = songPreviewPlayer.defaultAudioClip;
             _originalLobbyMusic = lobbyFlowCoordinator._ambienceAudioClip;
         }
 
         public void Dispose()
         {
-            _soundLoader.Unload(SoundType.Menu);
+            _sound.Dispose();
+            foreach (var release in new List<Action>(_playbackReleases)) release();
         }
 
         [AffinityPatch(typeof(SongPreviewPlayer), "Awake")]
@@ -44,13 +48,31 @@ namespace SoundReplacer.Patches
 
         private void ApplyMenuMusic()
         {
-            // Replace the default menu music before the default crossfade.
-            _songPreviewPlayer._defaultAudioClip = _config.MenuMusic switch
+            _sound.Load((clip, delayed) =>
             {
-                SoundLoader.NoSoundID => SoundLoader.Empty,
-                SoundLoader.DefaultSoundID => _originalMenuMusic,
-                _ => _menuMusic = _soundLoader.Load(_menuMusic, SoundType.Menu)
+                if (_songPreviewPlayer == null) return;
+                _menuMusic = clip;
+                _songPreviewPlayer._defaultAudioClip = clip ?? _originalMenuMusic;
+                if (delayed && _wantsDefaultMusic && _songPreviewPlayer.isActiveAndEnabled)
+                    _songPreviewPlayer.CrossfadeToDefault();
+            });
+        }
+
+        [AffinityPatch(typeof(SongPreviewPlayer), nameof(SongPreviewPlayer.CrossfadeTo), AffinityMethodType.Normal, new[] { typeof(AudioClip), typeof(float), typeof(float), typeof(float), typeof(bool), typeof(Action) })]
+        [AffinityPrefix]
+        private void RetainPlayingSound(AudioClip audioClip, bool isDefault, ref Action? onFadeOutCallback)
+        {
+            _wantsDefaultMusic = isDefault;
+            var retain = _soundLoader.RetainForPlayback(audioClip);
+            if (retain == null) return;
+            Action release = null!;
+            release = () =>
+            {
+                _playbackReleases.Remove(release);
+                retain();
             };
+            _playbackReleases.Add(release);
+            onFadeOutCallback += release;
         }
 
         [AffinityPatch(typeof(SongPreviewPlayer), nameof(SongPreviewPlayer.CrossfadeToNewDefault))]

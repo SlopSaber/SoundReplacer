@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using BeatSaberMarkupLanguage.Attributes;
 using BeatSaberMarkupLanguage.ViewControllers;
 using BeatSaberMarkupLanguage;
@@ -15,13 +16,16 @@ namespace SoundReplacer.UI
     {
         private SongPreviewPlayer _songPreviewPlayer = null!;
         private PluginConfig _config = null!;
+        private SoundLoader _soundLoader = null!;
         private BasicUIAudioManager _basicUIAudioManager = null!;
+        private int _refreshVersion;
 
         [Inject]
-        private void Construct(SongPreviewPlayer songPreviewPlayer, PluginConfig config)
+        private void Construct(SongPreviewPlayer songPreviewPlayer, PluginConfig config, SoundLoader soundLoader)
         {
             _songPreviewPlayer = songPreviewPlayer;
             _config = config;
+            _soundLoader = soundLoader;
         }
 
         private void Awake()
@@ -29,18 +33,25 @@ namespace SoundReplacer.UI
             _basicUIAudioManager = BeatSaberUI.BasicUIAudioManager;
         }
 
-        public void RefreshSoundList()
+        public async void RefreshSoundList()
         {
+            int version = ++_refreshVersion;
             try
             {
-                var directoryInfo = new DirectoryInfo(Path.Combine(UnityGame.UserDataPath, nameof(SoundReplacer)));
-                directoryInfo.Create();
-                SoundList = SoundLoader.DefaultSounds
-                    .Concat(directoryInfo
-                        .EnumerateFiles("*", SearchOption.AllDirectories)
-                        .Where(f => f.Extension is ".ogg" or ".mp3" or ".wav")
-                        .Select(f => f.Name))
-                    .ToArray();
+                var directory = Path.Combine(UnityGame.UserDataPath, nameof(SoundReplacer));
+                var sounds = await Task.Run(() =>
+                {
+                    var directoryInfo = new DirectoryInfo(directory);
+                    directoryInfo.Create();
+                    return SoundLoader.DefaultSounds
+                        .Concat(directoryInfo
+                            .EnumerateFiles("*", SearchOption.AllDirectories)
+                            .Where(f => f.Extension is ".ogg" or ".mp3" or ".wav")
+                            .Select(f => f.Name))
+                        .ToArray();
+                });
+                if (this == null || version != _refreshVersion) return;
+                SoundList = sounds;
 
                 NotifyPropertyChanged(nameof(SoundList));
             }
@@ -57,14 +68,22 @@ namespace SoundReplacer.UI
         protected string SettingCurrentGoodHitSound
         {
             get => _config.CutSound;
-            set => _config.CutSound = value;
+            set
+            {
+                _config.CutSound = value;
+                _soundLoader.Preload(SoundType.Cut);
+            }
         }
 
         [UIValue("bad-hitsound")]
         protected string SettingCurrentBadHitSound
         {
             get => _config.BadCutSound;
-            set => _config.BadCutSound = value;
+            set
+            {
+                _config.BadCutSound = value;
+                _soundLoader.Preload(SoundType.BadCut);
+            }
         }
 
         [UIValue("menu-music")]
@@ -74,6 +93,7 @@ namespace SoundReplacer.UI
             set
             {
                 _config.MenuMusic = value;
+                _soundLoader.Preload(SoundType.Menu);
                 _songPreviewPlayer.CrossfadeToDefault();
             }
         }
@@ -85,6 +105,7 @@ namespace SoundReplacer.UI
             set
             {
                 _config.ClickSound = value;
+                _soundLoader.Preload(SoundType.Click);
                 _basicUIAudioManager.Start();
             }
         }
@@ -93,14 +114,22 @@ namespace SoundReplacer.UI
         protected string SettingCurrentSuccessSound
         {
             get => _config.LevelClearedSound;
-            set => _config.LevelClearedSound = value;
+            set
+            {
+                _config.LevelClearedSound = value;
+                _soundLoader.Preload(SoundType.LevelCleared);
+            }
         }
 
         [UIValue("fail-sound")]
         protected string SettingCurrentFailSound
         {
             get => _config.LevelFailedSound;
-            set => _config.LevelFailedSound = value;
+            set
+            {
+                _config.LevelFailedSound = value;
+                _soundLoader.Preload(SoundType.LevelFailed);
+            }
         }
     }
 }
