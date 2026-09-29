@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!-- This file contains project properties used by the build. -->
 <Project>
 
@@ -16,7 +16,7 @@
     <PluginName>SoundReplacer</PluginName>
     <Authors>Otiosum</Authors>
     <Version>2.0.1</Version>
-    <GameVersion>1.45.1</GameVersion>
+    <GameVersion>1.45.2</GameVersion>
     <Description>Easily replace in-game sounds.</Description>
   </PropertyGroup>
 
